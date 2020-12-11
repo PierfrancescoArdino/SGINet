@@ -107,8 +107,8 @@ class CityscapesSegmentation(BaseDataset):
         if self.gt_transform is not None:
             gt = self.gt_transform(gt) * 255
         if self.inst_map_transform is not None and self.use_bbox:
-            inst_map = inst_map_complete =self.inst_map_transform(inst_map)
-        if self.idx_valid_ins is not -1:
+            inst_map = inst_map_complete =self.inst_map_transform(np.array(inst_map))
+        if self.idx_valid_ins != -1:
             masks, indexes = util._random_mask_with_instance_cond(
                 img.shape[1:], self.opt.min_hole_size,
                 self.opt.max_hole_size, (inst_map == self.idx_valid_ins) * 1.0, None)
@@ -119,7 +119,7 @@ class CityscapesSegmentation(BaseDataset):
             masks, indexes = util._random_mask(img.shape[1:],
                                                self.opt.min_hole_size,
                                                self.opt.max_hole_size)
-            inst_map = insta_maps_bbox = torch.zeros(1, img.shape[1], img.shape[2])
+            inst_map = insta_maps_bbox = inst_map_complete = torch.zeros(1, img.shape[1], img.shape[2])
             inst_map_compact = torch.zeros(1, self.opt.compact_sizey, self.opt.compact_sizex)
             theta = torch.Tensor([0 for _ in range(6)])
         mask_transform = transform.Compose([
@@ -127,7 +127,6 @@ class CityscapesSegmentation(BaseDataset):
         outputs["gt_images"] = img
         outputs["gt_seg_maps"] = gt
         outputs["inst_map"] = (inst_map == self.idx_valid_ins) * 1.0 if self.use_bbox else inst_map
-        outputs["inst_map_complete"] = inst_map_complete
         outputs["inst_map_valid_idx"] = self.idx_valid_ins
         outputs["images_path"] = self.images[index]
         outputs["masks"] = mask_transform(masks)
@@ -135,7 +134,7 @@ class CityscapesSegmentation(BaseDataset):
         outputs["insta_maps_bbox"] = insta_maps_bbox
         outputs["inst_map_compact"] = inst_map_compact
         outputs["theta"] = theta
-        outputs["compute_instance"] = torch.Tensor([1]) if self.idx_valid_ins is not -1 else torch.Tensor([0])
+        outputs["compute_instance"] = torch.Tensor([1]) if self.idx_valid_ins != -1 else torch.Tensor([0])
 
 
         return outputs
@@ -183,7 +182,7 @@ class CityscapesSegmentation(BaseDataset):
         if self.transform is not None:
             img = self.transform(img)
         if self.opt.use_load_mask:
-            if self.idx_valid_ins is not -1:
+            if self.idx_valid_ins != -1:
                 insta_maps_bbox, inst_map_compact, theta = util.inst_map2bbox(
                     (inst_map == self.idx_valid_ins) * 1.0, self.opt)
             else:
@@ -193,7 +192,7 @@ class CityscapesSegmentation(BaseDataset):
                                                self.opt.compact_sizex)
                 theta = torch.Tensor([0 for _ in range(6)])
         else:
-            if self.idx_valid_ins is not -1:
+            if self.idx_valid_ins != -1:
                 masks, indexes = util._random_mask_with_instance_cond(
                     img.shape[1:], self.opt.min_hole_size,
                     self.opt.max_hole_size,
@@ -226,7 +225,7 @@ class CityscapesSegmentation(BaseDataset):
         outputs["inst_map_compact"] = inst_map_compact
         outputs["theta"] = theta
         outputs["compute_instance"] = torch.Tensor(
-            [1]) if self.idx_valid_ins is not -1 else torch.Tensor([0])
+            [1]) if self.idx_valid_ins != -1 else torch.Tensor([0])
 
         return outputs
 
@@ -245,7 +244,7 @@ class CityscapesSegmentation(BaseDataset):
     def check_instance(self, inst, gt, test = False, crop_indexes =[0, 128, 256, 256], json_load=[], flip=False):
         instance_idx = []
         idx_valid_ins = []
-        inst = self.inst_map_transform(inst)
+        inst = self.inst_map_transform(np.array(inst))
         gt = self.gt_transform(gt) * 255
         contained_idx = []
         contained_idx = [int(obj_id) for obj_id, obj in json_load.items() if obj["train_id"] in self.classes_of_interest_ids and str(obj["class_id"]) in list(self.ch_to_inst_id.values())]

@@ -18,6 +18,7 @@ from pytorch_msssim import ssim
 import torch.distributed as dist
 from torch.nn.parallel import DataParallel
 from torch.nn.parallel import DistributedDataParallel
+from apex.parallel import DistributedDataParallel as DDP
 from skimage.measure import compare_psnr
 from utils.fid import calculate_fid
 torch.set_printoptions(precision=10)
@@ -98,29 +99,22 @@ def train(gpu, opt):
 
     if use_cuda:
         if len(opt.gpu_ids) > 1:
+            model.cuda()
             n = torch.cuda.device_count() // opt.local_world_size
             device = list(
                 range(opt.local_rank * n, (opt.local_rank + 1) * n))
             print(f"[{os.getpid()}] rank = {dist.get_rank()}, "
                   + f"world_size = {dist.get_world_size()},"
                     f" n = {n}, device_ids = {device}")
+            opt_level = "O1" if opt.fp16 else 'O0'
+            from apex import amp
+            model, [optimizer_G, optimizer_D, optimizer_G_instance,
+                    optimizer_D_obj] = amp.initialize(model, [
+                model.optimizer_G, model.optimizer_D,
+                model.optimizer_G_instance, model.optimizer_D_obj],
+                                                      opt_level=opt_level)
             model.cuda(device[0])
-            if opt.fp16:
-                from apex import amp
-                model, [optimizer_G, optimizer_D, optimizer_G_instance,
-                        optimizer_D_obj] = amp.initialize(model, [
-                    model.optimizer_G, model.optimizer_D,
-                    model.optimizer_G_instance, model.optimizer_D_obj],
-                                                          opt_level='O1')
-                model = DistributedDataParallel(model, device_ids=device,
-                                                find_unused_parameters=True)
-            else:
-                model = DistributedDataParallel(model, device_ids=device,
-                                                find_unused_parameters=True)
-                optimizer_G, optimizer_D, optimizer_G_instance, optimizer_D_obj = model.module.optimizer_G, \
-                                                                                  model.module.optimizer_D, \
-                                                                                  model.module.optimizer_G_instance, \
-                                                                                  model.module.optimizer_D_obj
+            model = DDP(model, delay_allreduce=True)
         else:
             device =\
                 [torch.device(f"cuda:{opt.gpu_ids[0]}" if use_cuda else "cpu")]
@@ -162,13 +156,13 @@ def train(gpu, opt):
             gt_images = input_dict["gt_images"].to(device[0])
             gt_seg_maps = input_dict["gt_seg_maps"].type(torch.LongTensor).to(device[0])
             inst_maps = input_dict["inst_map"].to(device[0])
-            inst_maps_valid_idx = input_dict["inst_map_valid_idx"]
+            inst_maps_valid_idx = input_dict["inst_map_valid_idx"].to(device[0])
             masks = input_dict["masks"].to(device[0])
-            indexes = input_dict["indexes"]
+            indexes = input_dict["indexes"].to(device[0])
             insta_maps_bbox = input_dict["insta_maps_bbox"].to(device[0])
             inst_map_compact = input_dict["inst_map_compact"].to(device[0])
             theta = input_dict["theta"].to(device[0])
-            compute_instance = input_dict["compute_instance"]
+            compute_instance = input_dict["compute_instance"].to(device[0])
 
             images_masked = (gt_images - gt_images * masks)
             if total_steps % opt.print_freq == print_delta:
@@ -248,47 +242,40 @@ def train(gpu, opt):
             optimizer_G.zero_grad()
             if opt.use_bbox:
                 optimizer_G_instance.zero_grad()
-            if opt.fp16:
-                if loss_instance != 0:
+                if opt.fp16:
                     with amp.scale_loss(loss_instance, optimizer_G_instance) as scaled_loss_instance:
                         scaled_loss_instance.backward()
-                    optimizer_G_instance.step()
+                else:
+                    loss_instance.backward()
+                optimizer_G_instance.step()
+            if opt.fp16:
                 with amp.scale_loss(loss_G, optimizer_G) as scaled_loss:
                     scaled_loss.backward()
-                optimizer_G.step()
-                optimizer_G.zero_grad()
             else:
                 loss_G.backward()
-                optimizer_G.step()
-                optimizer_G.zero_grad()
-                loss_instance.backward()
-                optimizer_G_instance.step()
-                optimizer_G_instance.zero_grad()
-
+            optimizer_G.step()
             # update discriminator weights
             if opt.use_bbox:
                 optimizer_D_obj.zero_grad()
-            optimizer_D.zero_grad()
-            if opt.fp16:
-                if loss_D_obj != 0:
+                if opt.fp16:
                     with amp.scale_loss(loss_D_obj, optimizer_D_obj) as scaled_loss_disc_obj:
                         scaled_loss_disc_obj.backward()
-                    optimizer_D_obj.step()
+                else:
+                    loss_D_obj.backward()
+                optimizer_D_obj.step()
+
+            optimizer_D.zero_grad()
+            if opt.fp16:
                 with amp.scale_loss(loss_D, optimizer_D) as scaled_loss:
                     scaled_loss.backward()
-                optimizer_D.step()
             else:
-                if loss_D_obj != 0:
-                    loss_D_obj.backward()
-                    optimizer_D_obj.step()
                 loss_D.backward()
-                optimizer_D.step()
+            optimizer_D.step()
 
             optimizer_D.zero_grad()
 
             ############## Display results and errors ##########
             ### print out errors
-
             if total_steps % opt.print_freq == print_delta:
                 if not len(opt.gpu_ids) > 1:
                     errors = {k: v.data.item() if not isinstance(v,

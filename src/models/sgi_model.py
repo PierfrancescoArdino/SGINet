@@ -314,28 +314,70 @@ class SGINetModel(BaseModel):
     def forward(self, model_input):
         # Encode Inputs
         # input_concat = torch.cat((image_masked, predicted_label), dim=1)
-        self.class_conditioning = self.ch_to_one_hot(
-            model_input["inst_maps_valid_idx"],
-            model_input["compute_instance"])
-        self.mu, self.logvar =\
-            self.netG_shape_encoder(model_input["inst_maps_compact"], self.class_conditioning, model_input["theta_transform"])
-        self.z_rep = self.reparameterize(self.mu, self.logvar, "train")
-        self.instance = self.netG_shape_decoder(self.z_rep,
-                                                self.class_conditioning, model_input["theta_transform"]) * model_input["compute_instance"].unsqueeze(2).unsqueeze(2)
-        self.instance_transformed = self.stn_fix(self.instance, model_input["theta_transform"], self.image_width, self.image_height)
-        disc_input_fake = self.instance
-        disc_input_real = model_input["inst_maps_compact"]
-        obj_pred_fake = self.netD_obj.forward(disc_input_fake.detach())
-        obj_pred_real = self.netD_obj.forward(disc_input_real)
-        # update D obj
+        loss_D_real_obj = loss_D_fake_obj = 0
+        if self.opt.use_bbox:
+            self.class_conditioning = self.ch_to_one_hot(
+                model_input["inst_maps_valid_idx"],
+                model_input["compute_instance"])
+            self.mu, self.logvar =\
+                self.netG_shape_encoder(model_input["inst_maps_compact"], self.class_conditioning, model_input["theta_transform"])
+            self.z_rep = self.reparameterize(self.mu, self.logvar, "train")
+            self.instance = self.netG_shape_decoder(self.z_rep,
+                                                    self.class_conditioning, model_input["theta_transform"]) * model_input["compute_instance"].unsqueeze(2).unsqueeze(2)
+            self.instance_transformed = self.stn_fix(self.instance, model_input["theta_transform"], self.image_width, self.image_height)
+            disc_input_fake = self.instance
+            disc_input_real = model_input["inst_maps_compact"]
+            obj_pred_fake = self.netD_obj.forward(disc_input_fake.detach())
+            obj_pred_real = self.netD_obj.forward(disc_input_real)
+            # update D obj
 
-        obj_pred_fake = obj_pred_fake[model_input["compute_instance"].squeeze().nonzero()]
-        obj_pred_real = obj_pred_real[model_input["compute_instance"].squeeze().nonzero()]
-        loss_D_fake_obj = self.criterionGAN.forward(obj_pred_fake, False)
-        loss_D_real_obj = self.criterionGAN.forward(obj_pred_real, True)
-        self.instance_masked = (self.instance_transformed.detach() * model_input["insta_maps_bbox"]).float()
-        self.instance_pad = self.pad_to_nClass((self.instance_masked > 0.5).float(), model_input["masks"], model_input['compute_instance'], model_input["inst_maps_valid_idx"])
-
+            obj_pred_fake = obj_pred_fake * model_input["compute_instance"]
+            obj_pred_real = obj_pred_real * model_input["compute_instance"] + (1 - model_input["compute_instance"])
+            loss_D_fake_obj = self.criterionGAN.forward(obj_pred_fake, False)
+            loss_D_real_obj = self.criterionGAN.forward(obj_pred_real, True)
+            self.instance_masked = (self.instance_transformed.detach() * model_input["insta_maps_bbox"]).float()
+            self.instance_pad = self.pad_to_nClass((self.instance_masked > 0.5).float(), model_input["masks"], model_input['compute_instance'], model_input["inst_maps_valid_idx"])
+            disc_input_fake = self.instance
+            obj_pred_fake = self.netD_obj.forward(disc_input_fake)
+            obj_pred_fake = obj_pred_fake * model_input["compute_instance"] + (1 - model_input["compute_instance"])
+            loss_G_fake_obj = self.criterionGAN.forward(obj_pred_fake, True)
+            loss_G_GAN_obj = loss_G_fake_obj
+            from apex import amp
+            self.mu = self.mu.float()[
+                model_input["compute_instance"].bool().squeeze(1)]
+            self.logvar = self.logvar.float()[
+                model_input["compute_instance"].bool().squeeze(1)]
+            if self.opt.fp16:
+                with amp.disable_casts():
+                    denominator = max((torch.sum(
+                        model_input["compute_instance"]) * self.opt.z_len), 1)
+                    instance_KL_loss = (- 0.5 * (torch.sum(
+                        1 + self.logvar - self.mu.pow(
+                            2) - self.logvar.exp()) / denominator)) * self.opt.lambda_KL_rec
+                    fake_inst = self.instance[
+                        model_input["compute_instance"].bool().squeeze(1)]
+                    real_inst = model_input["inst_maps_compact"][
+                        model_input["compute_instance"].bool().squeeze(1)]
+                    denominator = max(
+                        torch.prod(torch.FloatTensor(list(real_inst.shape))), 1)
+                    instance_rec_loss = torch.sum(
+                        torch.abs(fake_inst - real_inst)) / denominator
+                    instance_rec_loss = instance_rec_loss * self.opt.lambda_inst_rec
+            else:
+                denominator = max((torch.sum(model_input["compute_instance"]) * self.opt.z_len), 1)
+                instance_KL_loss = (- 0.5 * (torch.sum(
+                    1 + self.logvar - self.mu.pow(2) - self.logvar.exp()) / denominator)) * self.opt.lambda_KL_rec
+                fake_inst = self.instance[model_input["compute_instance"].squeeze().nonzero()]
+                real_inst = model_input["inst_maps_compact"][model_input["compute_instance"].squeeze().nonzero()]
+                denominator = max(torch.prod(torch.FloatTensor(list(real_inst.shape))), 1)
+                instance_rec_loss = torch.sum(torch.abs(fake_inst - real_inst)) / denominator
+                instance_rec_loss = instance_rec_loss * self.opt.lambda_inst_rec
+        else:
+            self.instance_masked = None
+            instance_KL_loss = 0
+            instance_rec_loss = 0
+            loss_G_GAN_obj = 0
+            self.instance_pad = self.instance_masked = [None]
         multi_scale_fake_seg_maps, fake_images, offset_flow = self.netG.forward(model_input["one_hot_gt_seg_maps_masked"],
                                                                                 model_input["gt_images_masked"],
                                                                                 model_input["masks"],
@@ -357,17 +399,12 @@ class SGINetModel(BaseModel):
         loss_D_penalty = 0
         loss_D = 0
         loss_G_GAN = 0
-        instance_KL_loss = 0
-        instance_rec_loss = 0
         loss_D_fake = loss_D_fake_global
         loss_D_real = loss_D_real_global
 
         # GAN feature matching loss
         ## G part
         loss_G_GAN_Feat = loss_image_rec = loss_seg_map_rec = loss_G_perceptual = loss_G_style = 0
-        instance_KL_loss = 0
-        instance_rec_loss = 0
-        loss_G_GAN_obj = 0
         loss_TV = 0
         # GAN loss (Fake Passability Loss)
         fake_cond = torch.cat((fake_images, model_input["one_hot_seg_map"]), dim=1)
@@ -409,43 +446,6 @@ class SGINetModel(BaseModel):
 
         loss_TV = losses.total_variation_loss(fake_images) if not self.opt.no_ganTV_loss else 0
         loss_TV *= self.opt.lambda_rec
-        disc_input_fake = self.instance
-        obj_pred_fake = self.netD_obj.forward(disc_input_fake)
-        obj_pred_fake = obj_pred_fake[
-            model_input["compute_instance"].bool()].unsqueeze(1)
-        loss_G_fake_obj = self.criterionGAN.forward(obj_pred_fake, True)
-        loss_G_GAN_obj = loss_G_fake_obj
-        from apex import amp
-        self.mu = self.mu.float()[model_input["compute_instance"].squeeze().nonzero()]
-        self.logvar = self.logvar.float()[model_input["compute_instance"].squeeze().nonzero()]
-        if self.opt.fp16:
-            with amp.disable_casts():
-                denominator = max((torch.sum(
-                    model_input["compute_instance"]) * self.opt.z_len), 1)
-                instance_KL_loss = (- 0.5 * (torch.sum(
-                    1 + self.logvar - self.mu.pow(
-                        2) - self.logvar.exp()) / denominator)) * self.opt.lambda_KL_rec
-                fake_inst = self.instance[
-                    model_input["compute_instance"].squeeze().nonzero()]
-                real_inst = model_input["inst_maps_compact"][
-                    model_input["compute_instance"].squeeze().nonzero()]
-                denominator = max(
-                    torch.prod(torch.FloatTensor(list(real_inst.shape))), 1)
-                instance_rec_loss = torch.sum(
-                    torch.abs(fake_inst - real_inst)) / denominator
-                instance_rec_loss = instance_rec_loss * self.opt.lambda_inst_rec
-        else:
-            denominator = max((torch.sum(model_input["compute_instance"]) * self.opt.z_len), 1)
-            instance_KL_loss = (- 0.5 * (torch.sum(1 + self.logvar - self.mu.pow(2) - self.logvar.exp()) / denominator)) * self.opt.lambda_KL_rec
-            fake_inst = self.instance[model_input["compute_instance"].squeeze().nonzero()]
-            real_inst = model_input["inst_maps_compact"][model_input["compute_instance"].squeeze().nonzero()]
-            denominator = max(torch.prod(torch.FloatTensor(list(real_inst.shape))), 1)
-            instance_rec_loss = torch.sum(torch.abs(fake_inst - real_inst)) / denominator
-            instance_rec_loss = instance_rec_loss * self.opt.lambda_inst_rec
-
-
-
-
 
         # Only return the fake_B image if necessary to save BW
         return [self.loss_filter(loss_G_GAN, instance_KL_loss, instance_rec_loss, loss_G_GAN_Feat, loss_image_rec,
