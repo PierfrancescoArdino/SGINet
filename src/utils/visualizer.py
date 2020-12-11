@@ -20,7 +20,8 @@ class Visualizer():
         self.base_folder = "SGI-NET"
 
         if self.tf_log:
-            import tensorflow as tf
+            import tensorflow.compat.v1 as tf
+            tf.disable_eager_execution()
             self.tf = tf
             self.log_dir = os.path.join(opt.checkpoints_dir, self.base_folder, opt.name, 'logs')
             self.writer = tf.summary.FileWriter(self.log_dir)
