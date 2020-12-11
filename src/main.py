@@ -250,9 +250,9 @@ def train(gpu, opt):
                 optimizer_G_instance.zero_grad()
             if opt.fp16:
                 if loss_instance != 0:
-                    loss_instance.backward()
+                    with amp.scale_loss(loss_instance, optimizer_G_instance) as scaled_loss_instance:
+                        scaled_loss_instance.backward()
                     optimizer_G_instance.step()
-                    optimizer_G_instance.zero_grad()
                 with amp.scale_loss(loss_G, optimizer_G) as scaled_loss:
                     scaled_loss.backward()
                 optimizer_G.step()
