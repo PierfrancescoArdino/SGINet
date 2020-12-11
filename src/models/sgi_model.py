@@ -396,7 +396,7 @@ class SGINetModel(BaseModel):
             loss_seg_map_rec +=\
                 self.criterionCE(scale_fake_seg_maps,
                                  torch.argmax(model_input["one_hot_seg_map"].long(),
-                                              dim=1)) * self.opt.lambda_rec * 1 / len(multi_scale_fake_seg_maps)
+                                              dim=1)) * self.opt.lambda_seg_map * 1 / len(multi_scale_fake_seg_maps)
         loss_G_style_out, loss_G_perceptual_out =\
             self.criterion_perceptual_style(fake_images,
                                             model_input["gt_images"],

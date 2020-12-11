@@ -54,7 +54,7 @@ class TrainOptions(BaseOptions):
         self.parser.add_argument('--lambda_inst_rec', type=float, default=20.0,
                                  help='weight for instance reconstruction loss')
         self.parser.add_argument('--lambda_seg_map', type=float, default=5.0,
-                                 help='weight for reconstruction loss')
+                                 help='weight for seg map reconstruction loss')
         self.parser.add_argument('--lambda_perceptual', type=float, default=10.0,
                                  help='weight for perceptual loss')
         self.parser.add_argument('--lambda_style', type=float,
