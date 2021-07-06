@@ -52,21 +52,15 @@ class SGINet(nn.Module):
 
         self.res_blocks = []
         if self.n_downsample_global < 4:
-            dilation_factors = [2, 5, 9, 16, 2, 5, 9, 16, 16]
+            dilation_factors = [2, 5, 9, 16, 2, 5, 9, 16, 16] if self.use_dilated_conv else [1,1,1,1,1,1,1,1,1]
         else:
-            dilation_factors = [2, 2, 2, 4, 4, 4, 8, 8, 8]
+            dilation_factors = [2, 2, 2, 4, 4, 4, 8, 8, 8] if self.use_dilated_conv else [1,1,1,1,1,1,1,1,1]
 
         for factor in dilation_factors:
-            if self.use_dilated_conv:
-                self.res_blocks += \
-                    [BasicBlock_v2(inplanes=feat_dim, planes=feat_dim, stride=1,
-                                   dilation=(factor, factor), norm=norm_layer,
-                                   use_sn=self.use_sn_generator, activation=self.activation)]
-            else:
-                self.res_blocks += \
-                    [BasicBlock_v2(inplanes=feat_dim, planes=feat_dim, stride=1,
-                                   dilation=(1, 1), norm=norm_layer,
-                                   use_sn=self.use_sn_generator, activation=self.activation)]
+            self.res_blocks += \
+                [BasicBlock_v2(inplanes=feat_dim, planes=feat_dim, stride=1,
+                               dilation=(factor, factor), norm=norm_layer,
+                               use_sn=self.use_sn_generator, activation=self.activation)]
 
         self.res_blocks = nn.Sequential(*self.res_blocks)
         self.upconv = []

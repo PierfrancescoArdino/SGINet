@@ -67,6 +67,19 @@ class BaseOptions():
         self.parser.add_argument("--use_gt_instance_encoder", action='store_true')
         self.parser.add_argument("--use_pixel_shuffle",
                                  action='store_true')
+        self.parser.add_argument('--no_deconv', action='store_true', help='do *not* use deconv layer, if false, use upsampling + conv')
+        self.parser.add_argument('--use_attention', action='store_true',
+                                 help='do use contextual attention')
+        self.parser.add_argument('--use_discounted_mask', action='store_true',
+                                 help='do use discounted mask for l1 loss')
+        self.parser.add_argument('--use_sn_generator', action='store_true',
+                                 help='do use spectral norm in generator')
+        self.parser.add_argument('--use_sn_discriminator', action='store_true',
+                                 help='do use spectral norm in discriminator')
+        self.parser.add_argument('--no_dilated_conv', action='store_true',
+                                 help='do use resblock without dilation instead of resblock+dilation')
+        self.parser.add_argument('--min_hole_size', type=int, default=32, help='min size of missing hole')
+        self.parser.add_argument('--max_hole_size', type=int, default=128, help="max size of missing hole")
         self.parser.add_argument("--use_multi_scale_loss", action="store_true", help="multi scale cross entropy loss")
 
 

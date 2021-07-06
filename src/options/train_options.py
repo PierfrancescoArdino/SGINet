@@ -26,19 +26,6 @@ class TrainOptions(BaseOptions):
         self.parser.add_argument('--beta2', type=float, default=0.9,
                                  help='momentum term of adam')
         self.parser.add_argument('--lr', type=float, default=0.0002, help='initial learning rate for adam')
-        self.parser.add_argument('--no_deconv', action='store_true', help='do *not* use deconv layer, if false, use upsampling + conv')
-        self.parser.add_argument('--use_attention', action='store_true',
-                                 help='do use contextual attention')
-        self.parser.add_argument('--use_discounted_mask', action='store_true',
-                                 help='do use discounted mask for l1 loss')
-        self.parser.add_argument('--use_sn_generator', action='store_true',
-                                 help='do use spectral norm in generator')
-        self.parser.add_argument('--use_sn_discriminator', action='store_true',
-                                 help='do use spectral norm in discriminator')
-        self.parser.add_argument('--no_dilated_conv', action='store_true',
-                                 help='do use resblock without dilation instead of resblock+dilation')
-        self.parser.add_argument('--min_hole_size', type=int, default=32, help='min size of missing hole')
-        self.parser.add_argument('--max_hole_size', type=int, default=128, help="max size of missing hole")
 
         # for discriminators
         self.parser.add_argument('--num_D_local', type=int, default=1, help='number of local discriminators to use')
@@ -68,8 +55,6 @@ class TrainOptions(BaseOptions):
         self.parser.add_argument('--which_perceptual_loss', type=str, help='specify wich perceptuall loss to use', choices=['vgg','alex','None'], default="vgg")
         self.parser.add_argument('--no_ganStyle_loss', action='store_true',
                                  help='if specified, do *not* use Gan Style loss')
-        self.parser.add_argument('--no_ganTV_loss', action='store_true',
-                                 help='if specified, do *not* use TV loss')
         self.parser.add_argument('--gan_mode', type=str, default='lsgan', choices=['vanilla','lsgan','wgangp','wganr1'], help='the type of GAN objective. [vanilla| lsgan | wgangp]. vanilla GAN loss is the cross-entropy objective used in the original GAN paper.')
 
 

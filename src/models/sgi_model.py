@@ -50,18 +50,18 @@ class SGINetModel(BaseModel):
     def name(self):
         return 'SGINetModel'
 
-    def init_loss_filter(self, use_gan_feat_loss, use_perceptual_loss, use_style_loss, use_tv_loss, gan_mode):
-        flags = (True, True, True, use_gan_feat_loss, True, True, use_perceptual_loss, use_style_loss, use_tv_loss, True, True, True, True, True)
+    def init_loss_filter(self, use_gan_feat_loss, use_perceptual_loss, use_style_loss, gan_mode):
+        flags = (True, True, True, use_gan_feat_loss, True, True, use_perceptual_loss, use_style_loss, True, True, True, True, True)
         if gan_mode == "wgangp":
-            def loss_filter(g_gan, g_gan_feat, g_image_rec, g_seg_map_rec, g_perceptual, g_style, g_tv, d_loss,
+            def loss_filter(g_gan, g_gan_feat, g_image_rec, g_seg_map_rec, g_perceptual, g_style, d_loss,
                             wgan_gp, d_real_obj, d_fake_obj, g_gan_obj):
                 return [l for (l, f) in
-                        zip((g_gan, g_gan_feat, g_image_rec, g_seg_map_rec, g_perceptual, g_style, g_tv, d_loss,
+                        zip((g_gan, g_gan_feat, g_image_rec, g_seg_map_rec, g_perceptual, g_style, d_loss,
                              wgan_gp, d_real_obj, d_fake_obj, g_gan_obj), flags) if f]
         else:
-            def loss_filter(g_gan, g_kl_inst, g_inst_rec, g_gan_feat, g_image_rec, g_seg_map_rec, g_perceptual, g_style, g_tv, d_real, d_fake, d_real_obj, d_fake_obj, g_gan_obj):
+            def loss_filter(g_gan, g_kl_inst, g_inst_rec, g_gan_feat, g_image_rec, g_seg_map_rec, g_perceptual, g_style, d_real, d_fake, d_real_obj, d_fake_obj, g_gan_obj):
                 return [l for (l, f) in
-                        zip((g_gan, g_kl_inst, g_inst_rec, g_gan_feat, g_image_rec, g_seg_map_rec, g_perceptual, g_style, g_tv, d_real, d_fake, d_real_obj, d_fake_obj, g_gan_obj), flags) if f]
+                        zip((g_gan, g_kl_inst, g_inst_rec, g_gan_feat, g_image_rec, g_seg_map_rec, g_perceptual, g_style, d_real, d_fake, d_real_obj, d_fake_obj, g_gan_obj), flags) if f]
         return loss_filter
 
     def __init__(self, opt):
@@ -218,7 +218,7 @@ class SGINetModel(BaseModel):
                     self.loss_filter('G_GAN', "G_KL_inst", "G_Inst_rec", 'G_GAN_Feat', "G_Image_Rec",
                                      "G_seg_map_rec",
                                      'G_perceptual_' + opt.which_perceptual_loss,
-                                     "G_Style", 'G_TV_loss', 'D_real', 'D_fake', 'D_real_obj', 'D_fake_obj', "G_GAN_obj")
+                                     "G_Style", 'D_real', 'D_fake', 'D_real_obj', 'D_fake_obj', "G_GAN_obj")
 
             # initialize optimizers
             # optimizer G
@@ -405,7 +405,6 @@ class SGINetModel(BaseModel):
         # GAN feature matching loss
         ## G part
         loss_G_GAN_Feat = loss_image_rec = loss_seg_map_rec = loss_G_perceptual = loss_G_style = 0
-        loss_TV = 0
         # GAN loss (Fake Passability Loss)
         fake_cond = torch.cat((fake_images, model_input["one_hot_seg_map"]), dim=1)
         global_pred_fake = self.netD_global.forward(fake_cond)
@@ -444,13 +443,10 @@ class SGINetModel(BaseModel):
         loss_G_perceptual *= self.opt.lambda_perceptual
         loss_G_style *= self.opt.lambda_style
 
-        loss_TV = losses.total_variation_loss(fake_images) if not self.opt.no_ganTV_loss else 0
-        loss_TV *= self.opt.lambda_rec
-
         # Only return the fake_B image if necessary to save BW
         return [self.loss_filter(loss_G_GAN, instance_KL_loss, instance_rec_loss, loss_G_GAN_Feat, loss_image_rec,
                                  loss_seg_map_rec, loss_G_perceptual,
-                                 loss_G_style, loss_TV, loss_D_real, loss_D_fake,
+                                 loss_G_style, loss_D_real, loss_D_fake,
                                  loss_D_real_obj, loss_D_fake_obj, loss_G_GAN_obj),
                 fake_images, self.instance_pad, self.instance_masked, multi_scale_fake_seg_maps[-1], offset_flow, model_input["one_hot_gt_seg_maps_masked"]]
 

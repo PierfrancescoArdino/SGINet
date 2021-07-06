@@ -234,8 +234,7 @@ def train(gpu, opt):
                                        opt.which_perceptual_loss, 0) + \
                          loss_dict.get("G_Image_Rec", 0) + \
                          loss_dict.get("G_seg_map_rec", 0) + \
-                         loss_dict.get("G_Style", 0) + \
-                         loss_dict.get("G_TV_loss", 0)
+                         loss_dict.get("G_Style", 0)
             loss_instance = loss_dict.get('G_KL_inst', 0) + \
                          loss_dict.get('G_Inst_rec', 0) +\
                                 loss_dict.get("G_GAN_obj", 0)
