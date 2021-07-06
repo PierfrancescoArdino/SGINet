@@ -52,13 +52,9 @@ Possible values of `split`
 
 Install `cityscapesscripts` with `pip`
 ```
-python -m pip install cityscapesscripts
+pip install -e .
 ```
 
-Graphical tools (viewer and label tool) are based on Qt5 and can be installed via
-```
-python -m pip install cityscapesscripts[gui]
-```
 
 ### Usage
 
