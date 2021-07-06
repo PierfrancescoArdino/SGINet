@@ -19,7 +19,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DataParallel
 from torch.nn.parallel import DistributedDataParallel
 from apex.parallel import DistributedDataParallel as DDP
-from skimage.measure import compare_psnr
+from skimage.metrics import peak_signal_noise_ratio as compare_psnr
 from utils.fid import calculate_fid
 torch.set_printoptions(precision=10)
 import resource
@@ -372,7 +372,7 @@ def train(gpu, opt):
             else:
                 model.update_learning_rate()
 
-def test_slg(opt):
+def test_sgi(opt):
     folder_name = "SGI-NET"
     import glob
     epochs = [f"epoch_{x.split('/')[-1].split('_')[0]}" for x in glob.glob(os.path.join(opt.checkpoints_dir, folder_name, opt.name) + "/latest*SGI*_G.pth")]
@@ -589,4 +589,4 @@ if __name__ == "__main__":
 
         opt.no_flip = True
         opt.isTrain = False
-        test_slg(opt)
+        test_sgi(opt)
