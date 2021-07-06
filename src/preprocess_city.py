@@ -9,10 +9,15 @@ import json
 from cityscapesscripts.helpers.annotation import Annotation
 from cityscapesscripts.helpers.labels     import labels, name2label
 from collections import namedtuple
-Rectangle = namedtuple('Rectangle', 'ymin xmin ymax xmax')
+import multiprocessing
+def size(s):
+    try:
+        width , height = map(int, s.split(','))
+        return width , height
+    except:
+        raise argparse.ArgumentTypeError("Size must be width , height")
 
-ra = Rectangle(3., 3., 5., 5.)
-rb = Rectangle(1., 1., 4., 3.5)
+Rectangle = namedtuple('Rectangle', 'ymin xmin ymax xmax')
 
 def check_bbox_occlusion(bbox1, bbox2):
 
@@ -53,7 +58,7 @@ def check_occlusion(json_data, img):
 
 
 
-def generate_json_data_inst(fname, img, src):
+def generate_json_data_inst(fname, img, src, resize_size):
     json_name = "_".join(fname.split('_')[:-1]) + "_polygons.json"
     annotation = Annotation()
     annotation.fromJsonFile(json_name)
@@ -103,8 +108,8 @@ def generate_json_data_inst(fname, img, src):
                 width = float(xx.max() - xx.min() + 1)
                 box_area = height * width
                 area_ratio = float(ins_area) / box_area
-                width_ratio = float(512) / width
-                height_ratio = float(256) / height
+                width_ratio = float(resize_size[0]) / width
+                height_ratio = float(resize_size[1]) / height
                 aspect_ratio = np.max((height / width, width / height))
                 json_data[str(id)] = {"class_id": int(labelTuple.id),
                                       "global_id": int(object_id),
@@ -124,21 +129,21 @@ def generate_json_data_inst(fname, img, src):
 
 
 
-def copy_file(src, src_ext, dst, type):
+def copy_file(src, src_ext, dst, type, resize_size):
     # find all files ends up with ext
     flist = sorted(glob.glob(os.path.join(src, '*', src_ext)))
-    for fname in flist:
+    for idx, fname in enumerate(flist):
         src_path = fname
         img = Image.open(src_path)
         if type == "img":
-            img = img.resize((512,256), Image.BICUBIC)
+            img = img.resize((resize_size[0],resize_size[1]), Image.BICUBIC)
         elif type in ["inst", "label"]:
-            img = img.resize((512,256), Image.NEAREST)
+            img = img.resize((resize_size[0],resize_size[1]), Image.NEAREST)
             if type == "inst":
-                json_data = generate_json_data_inst(fname, img, src)
+                json_data = generate_json_data_inst(fname, img, src, resize_size)
                 json.dump(json_data, open(os.path.join(dst, "_".join(src_path.split("/")[-1].split("_")[:-1])+"_data.json"), "w"), indent=4)
         img.save(os.path.join(dst, src_path.split("/")[-1]))
-        print('copied %s to %s' % (src_path, dst))
+        print(f'[{idx+1}/{len(flist)}] copied {src_path} to {dst}')
 
 
 # organize image
@@ -146,6 +151,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataroot', type=str,
                         default='../datasets')
+    parser.add_argument(
+        '--resize_size',
+        default=(2048, 1024),
+        type=size,
+        help='resize image size')
+    parser.add_argument("--use_multiprocessing", default=False,
+            action='store_true', help="run the preprocessing in parallel")
 
     opt = parser.parse_args()
     folder_name = opt.dataroot
@@ -169,21 +181,41 @@ if __name__ == '__main__':
         os.makedirs(val_label_dst)
     if not os.path.exists(val_inst_dst):
         os.makedirs(val_inst_dst)
-    # train_image
-    copy_file(os.path.join(opt.dataroot,'leftImg8bit/train'),
-              '*_leftImg8bit.png', train_img_dst,"img")
-    # train_label
-    copy_file(os.path.join(opt.dataroot,'gtFine/train'),
-              '*_trainIds.png', train_label_dst, "label")
-    # train_inst
-    copy_file(os.path.join(opt.dataroot,'gtFine/train'),
-            '*_instanceIds.png', train_inst_dst, "inst")
-    # val_image
-    copy_file(os.path.join(opt.dataroot,'leftImg8bit/val'),
-            '*_leftImg8bit.png', val_img_dst, "img")
-    # val_label
-    copy_file(os.path.join(opt.dataroot,'gtFine/val'),
-            '*_trainIds.png', val_label_dst, "label")
-    # val_inst
-    copy_file(os.path.join(opt.dataroot,'gtFine/val'),
-            '*_instanceIds.png', val_inst_dst, "inst")
+    if opt.use_multiprocessing:
+
+        # pool object with number of element
+        pool = multiprocessing.Pool(processes=6)
+        parameters = [
+            [os.path.join(opt.dataroot,'leftImg8bit/train'),
+                  '*_leftImg8bit.png', train_img_dst,"img", opt.resize_size],
+            [os.path.join(opt.dataroot,'gtFine/train'),
+                  '*_trainIds.png', train_label_dst, "label", opt.resize_size],
+            [os.path.join(opt.dataroot,'gtFine/train'),
+                '*_instanceIds.png', train_inst_dst, "inst", opt.resize_size],
+            [os.path.join(opt.dataroot,'leftImg8bit/val'),
+                '*_leftImg8bit.png', val_img_dst, "img", opt.resize_size],
+            [os.path.join(opt.dataroot,'gtFine/val'),
+                '*_trainIds.png', val_label_dst, "label", opt.resize_size],
+            [os.path.join(opt.dataroot,'gtFine/val'),
+                '*_instanceIds.png', val_inst_dst, "inst", opt.resize_size]
+        ]
+        pool.starmap(copy_file, parameters)
+    else:
+        # train_image
+        copy_file(os.path.join(opt.dataroot,'leftImg8bit/train'),
+              '*_leftImg8bit.png', train_img_dst,"img", opt.resize_size)
+        # train_label
+        copy_file(os.path.join(opt.dataroot,'gtFine/train'),
+                  '*_trainIds.png', train_label_dst, "label", opt.resize_size)
+        # train_inst
+        copy_file(os.path.join(opt.dataroot,'gtFine/train'),
+                '*_instanceIds.png', train_inst_dst, "inst", opt.resize_size)
+        # val_image
+        copy_file(os.path.join(opt.dataroot,'leftImg8bit/val'),
+                '*_leftImg8bit.png', val_img_dst, "img", opt.resize_size)
+        # val_label
+        copy_file(os.path.join(opt.dataroot,'gtFine/val'),
+                '*_trainIds.png', val_label_dst, "label", opt.resize_size)
+        # val_inst
+        copy_file(os.path.join(opt.dataroot,'gtFine/val'),
+                '*_instanceIds.png', val_inst_dst, "inst", opt.resize_size)
