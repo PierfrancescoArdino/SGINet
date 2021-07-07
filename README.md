@@ -43,10 +43,38 @@ sh install_nvidia_apex.sh
 * Please download the Cityscapes dataset from the [official website](https://www.cityscapes-dataset.com/) (registration required). After downloading, please put these files under the ```~/datasets/cityscapes/``` folder and run the following command in order to generate the correct segmentation maps
   ```
   cd cityscapesScripts
-  CITYSCAPES_DATASET=~/datasets/cityscapes/ python cityscapesscripts/preparation/createTrainIdLabelImgs.py
+  CITYSCAPES_DATASET=~/datasets/cityscapes/
+  python cityscapesscripts/preparation/createTrainIdLabelImgs.py
   ```
-  If you want to use a different number of labels for the segmentation you can change them in the ```cityscapesScripts/cityscapesscripts/helpers/labels.py``` file.
-  
+  If you want to use a different number of labels for the segmentation you can change them in the ```cityscapesScripts/cityscapesscripts/helpers/labels.py``` file. 
+
+  You should end up with the following structure:
+  ```
+  datasets
+  ├── cityscapes
+  │   ├── leftImg8bit_sequence
+  │   │   ├── train
+  │   │   │   ├── aachen
+  │   │   │   │   ├── aachen_000003_000019_leftImg8bit.png
+  │   │   │   │   ├── ...
+  │   │   ├── val
+  │   │   │   ├── frankfurt
+  │   │   │   │   ├── frankfurt_000000_000294_leftImg8bit.png
+  │   │   │   │   ├── ...
+  │   ├── gtFine
+  │   │   ├── train
+  │   │   │   ├── aachen
+  │   │   │   │   ├── aachen_000003_000019_gtFine_trainIds.png
+  │   │   │   │   ├── aachen_000003_000019_gtFine_polygons.json
+  │   │   │   │   ├── aachen_000003_000019_gtFine_instanceIds.png
+  │   │   │   │   ├── ...
+  │   │   ├── val
+  │   │   │   ├── frankfurt
+  │   │   │   │   ├── frankfurt_000000_000294_gtFine_trainIds.png
+  │   │   │   │   ├── frankfurt_000000_000294_gtFine_polygons.json
+  │   │   │   │   ├── frankfurt_000000_000294_gtFine_instanceIds.png
+  │   │   │   │   ├── ...
+  ```
 * Then run the script ```src/preprocess_city.py``` in order to prepare the dataset.
   #### Usage
     The script takes as input three parameters:
@@ -58,7 +86,37 @@ sh install_nvidia_apex.sh
   cd src
   python preprocess_city.py --dataroot ~/datasets/cityscapes/ --resize_size 512,256 --use_multiprocessing
   ```
-
+* Copy the train list and the evaluation list from ```file_list/cityscapes``` into the dataroot ```~/datasets/cityscapes/```
+  ```bash
+  cp file_list/cityscapes/* ~/dataset/cityscapes/
+   ```
+    You should end up with the following structure:
+  ```
+  datasets
+  ├── cityscapes
+  │   ├── train_img
+  │   │   ├── aachen_000003_000019_leftImg8bit.png
+  │   │   ├── ...
+  │   ├── val_img
+  │   │   ├── frankfurt_000000_000294_leftImg8bit.png
+  │   │   ├── ...
+  │   ├── train_label
+  │   │   ├── aachen_000003_000019_gtFine_trainIds.png
+  │   │   ├── ...
+  │   ├── val_label
+  │   │   ├── frankfurt_000000_000294_gtFine_trainIds.png
+  │   │   ├── ...
+  │   ├── train_inst
+  │   │   ├── aachen_000003_000019_gtFine_data.json
+  │   │   ├── aachen_000003_000019_gtFine_instanceIds.png
+  │   │   ├── ...
+  │   ├── val_inst
+  │   │   ├── frankfurt_000000_000294_gtFine_data.json
+  │   │   ├── frankfurt_000000_000294_gtFine_instanceIds.png
+  │   │   ├── ...
+  │   ├── train.txt
+  │   ├── val.txt
+  ```
 #### Indian Driving Dataset
 TODO
 
