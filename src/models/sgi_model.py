@@ -184,7 +184,6 @@ class SGINetModel(BaseModel):
             self.loss_filter = self.init_loss_filter(
                 not opt.no_ganFeat_loss,
                 self.use_perceptual_loss, not self.opt.no_ganStyle_loss,
-                not self.opt.no_ganTV_loss,
                 self.opt.gan_mode)
             if len(self.gpu_ids) > 0:
                 self.criterionGAN = losses.GANLoss(gan_mode=self.gan_mode,

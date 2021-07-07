@@ -19,7 +19,7 @@ Please follow the instructions to run the code.
 
 # Scripts
 
-## Installation
+## 1. Installation
 
  - See the [`sgi_net.yml`](./sgi_net.yml) configuration file. We provide an user-friendly configuring method via Conda system, and you can create a new Conda environment using the command:
 
@@ -38,7 +38,7 @@ pip install -e .
 sh install_nvidia_apex.sh
 ```
 
-## Data Preprocessing
+## 2. Data Preprocessing
 ### Cityscapes
 * Please download the Cityscapes dataset from the [official website](https://www.cityscapes-dataset.com/) (registration required). After downloading, please put these files under the ```~/datasets/cityscapes/``` folder and run the following command in order to generate the correct segmentation maps
   ```
@@ -119,5 +119,48 @@ sh install_nvidia_apex.sh
   ```
 #### Indian Driving Dataset
 TODO
+### 3. Train
+#### Single-GPU Train
+* Train a model at 256 x 256 resolution with cropping and Pixel Shuffle in the decoder
+  ```bash
+  cd src
+  sh script/train_paper_cityscapes_pixel_shuffle.sh
+  ```
+* Train a model at 256 x 256 resolution with cropping and deconvolution in the decoder
+  ```bash
+  cd src
+  sh script/train_paper_cityscapes.sh
+  ```
+#### Multi-GPU Train
+* Train a model at 256 x 256 resolution with cropping and Pixel Shuffle in the decoder
+  ```bash
+  cd src
+  sh script/train_paper_cityscapes_multigpu_pixel_shuffle.sh
+  ```
+* Train a model at 256 x 256 resolution with cropping and deconvolution in the decoder
+  ```bash
+  cd src
+  sh script/train_paper_cityscapes_multigpu.sh
+  ```
+The example consider a scenario with a single node and two gpus per node. Please change according to your needs. For more information check the [DDP example](https://github.com/pytorch/examples/tree/master/distributed/ddp)
 
+#### Training with Automatic Mixed Precision (AMP) for faster speed
+* Train a model at 256 x 256 resolution with cropping and Pixel Shuffle in the decoder
+  ```bash
+  cd src
+  sh script/train_paper_cityscapes_fp16_multigpu_pixel_shuffle.sh
+  ```
+* Train a model at 256 x 256 resolution with cropping and deconvolution in the decoder
+  ```bash
+  cd src
+  sh script/train_paper_cityscapes_fp16_multigpu.sh
+  ```
+The example consider a scenario with a single node and two gpus per node. Please change according to your needs. For more information check the [DDP example](https://github.com/pytorch/examples/tree/master/distributed/ddp)
+### 4. Test
 WORK IN PROGRESS
+
+## More Training/Test Details
+- Flags: see `options/train_options.py` and `options/base_options.py` for all the training flags; see `options/test_options.py` and `options/base_options.py` for all the test flags.
+
+## Acknowledgments
+This code borrows heavily from [pix2pixHD](https://github.com/NVIDIA/pix2pixHD).
